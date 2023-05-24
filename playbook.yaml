@@ -1,0 +1,73 @@
+---
+- name: Update packages
+  hosts: hetzner
+
+  tasks:
+  - name: thing to do first in this playbook
+    ansible.builtin.command: cat /etc/os-release 
+  - name: Update all packages to their latest version
+    ansible.builtin.apt:
+      name: "*"
+      state: latest
+
+- name: Podman
+  hosts: "hetzner"
+  vars:
+    volume_path: podman
+    message: "test!!"
+
+  tasks:
+    - name: Install Podman
+      ansible.builtin.apt:
+        name: podman
+        state: latest
+      become: true
+
+    - name: Create volume dir
+      ansible.builtin.file:
+        path: "{{ volume_path }}"
+        state: directory
+        mode: "0775"
+
+    - name: Create index.html
+      ansible.builtin.copy:
+        dest: "{{ volume_path }}/index.html"
+        content: "{{ message }}"
+        mode: "0664"
+
+    - name: Run httpd container
+      containers.podman.podman_container:
+        name: apache
+        image: docker.io/httpd
+        state: started
+        volume:
+          - "./{{ volume_path }}/:/usr/local/apache2/htdocs:z"
+        ports:
+          - "9000:80"
+
+    - name: Check Web Page
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000
+        return_content: true
+      register: web_output
+      changed_when: false
+
+    - name: Podman ps
+      ansible.builtin.command: podman ps
+      register: podman_output
+      changed_when: false
+
+    - containers.podman.podman_container_info:
+      name: Gather facts for all containers
+      register: container_info
+
+
+    - name: Output
+      ansible.builtin.debug:
+        msg:
+          - "Output of podman ps command:"
+          - "{{ podman_output.stdout_lines }}"
+          - "Contents of web page:"
+          - "{{ web_output.content }}"
+          - "Container info:"
+          - "{{ container_info }}"
